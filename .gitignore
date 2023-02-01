@@ -1,0 +1,12 @@
+*.js
+!jest.config.js
+!build.js
+*.d.ts
+node_modules
+.aws-sam
+.idea
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+
