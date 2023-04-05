@@ -11,7 +11,7 @@ Supported runtimes
 
 ### Configuration (Node.js)
 
-1. Merloc deployment 
+#### 1. Merloc deployment 
    
    * Go to broker stack deploy folder ``cd merloc-broker/stack/deployment``
    * Start deploy by running ``PROFILE=dev ./deploy.sh``
@@ -20,9 +20,9 @@ Supported runtimes
       ``merloc-broker-stack-dev.merlocbrokerurloutputdev = wss://szmglosakb.execute-api.eu-central-1.amazonaws.com/dev``
 
    
-2. [MerLoc GateKeeper](https://github.com/thundra-io/merloc-gatekeeper-aws-lambda-extension) -  Allows AWS Lambda functions to communicate with your local runtime through broker. Add MerLoc GateKeeper as AWS Lambda extension
+#### 2. [MerLoc GateKeeper](https://github.com/thundra-io/merloc-gatekeeper-aws-lambda-extension) -  Allows AWS Lambda functions to communicate with your local runtime through broker. Add MerLoc GateKeeper as AWS Lambda extension
    to your lambda function that you want to debug.
-   * add GateKeeper layer to your lambda function in format ``arn:aws:lambda:${region}:269863060030:layer:merloc-gatekeeper:${version}``
+   * add GateKeeper layer to your lambda function in format ``arn:aws:lambda:${region}:269863060030:layer:merloc-gatekeeper-nodejs:${version}`` (check [here](https://github.com/thundra-io/merloc-gatekeeper-aws-lambda-extension) if there is some change and what is the last available version)
    * add environment variables explained [here](https://github.com/thundra-io/merloc-gatekeeper-aws-lambda-extension)
    
    Example
@@ -30,26 +30,25 @@ Supported runtimes
 ```yml
 Resources:
   HelloWorldFunction:
-    Type: AWS::Serverless::Function
+    Type: AWS::Serverless::Function 
     Properties:
-      FunctionName: test-function
       CodeUri: hello-world/
+      FunctionName: sam-test-function
       Handler: app.lambdaHandler
-      Runtime: nodejs14.x
+      Runtime: nodejs16.x
       Layers:
-        - arn:aws:lambda:eu-central-1:269863060030:layer:merloc-gatekeeper:26
+        - arn:aws:lambda:eu-central-1:269863060030:layer:merloc-gatekeeper-nodejs:4
       Environment:
         Variables:
           AWS_LAMBDA_EXEC_WRAPPER: "/opt/extensions/merloc-gatekeeper-ext/bootstrap"
-          MERLOC_BROKER_URL: "wss://szmglosakb.execute-api.eu-central-1.amazonaws.com/dev"
-          MERLOC_DEBUG_ENABLE: "true"
-          MERLOC_SAM_FUNCTION_NAME: "test-function"
+          MERLOC_BROKER_URL: <YOUR_BROKER_URL>
+          MERLOC_SAM_FUNCTION_NAME: "HelloWorldFunction" #logical resource id of your AWS Lambda function
 ```
    * AWS CDK
 ```ts
 const layer =
     LayerVersion.fromLayerVersionArn(this, 'merloc-layer',
-        'arn:aws:lambda:eu-central-1:269863060030:layer:merloc-gatekeeper:26')
+        'arn:aws:lambda:eu-central-1:269863060030:layer:merloc-gatekeeper-nodejs:4')
 new NodejsFunction(
     this,
     `test-function`,
@@ -62,7 +61,7 @@ new NodejsFunction(
         layers: [layer],
         environment: {
             "AWS_LAMBDA_EXEC_WRAPPER": "/opt/extensions/merloc-gatekeeper-ext/bootstrap",
-            "MERLOC_BROKER_URL": "wss://szmglosakb.execute-api.eu-central-1.amazonaws.com/dev",
+            "MERLOC_BROKER_URL": "<YOUR_BROKER_URL>",
             "MERLOC_DEBUG_ENABLE": "true",
             "MERLOC_SAM_FUNCTION_NAME": "test-function"
         }
@@ -72,11 +71,11 @@ new NodejsFunction(
 
 ```
 
-3. Local AWS Lambda runtime
+#### 3. Local AWS Lambda runtime
    * Install merloc CLI with npm
       * NOTE - You can use merloc CLI only if you are working with Serverless Framework or AWS SAM. If you are using AWS CDK possible adjustments will be explained in the section [AWS CDK](#aws-cdk).
-   * Specify **broker-url** that you saved from step *1c* and run the following command
-``merloc -b wss://szmglosakb.execute-api.eu-central-1.amazonaws.com/dev -d`` 
+   * Specify **broker-url** that you saved from step [Merloc deployment](#1-merloc-deployment) and run the following command
+``merloc -b <YOUR_BROKER_URL> -d`` 
    * You should see the message ``Initialization completed. MerLoc is ready!``
    * Invoke lambda function and you should see the message ``<function-name>  Debugger listening on ws://0.0.0.0:<debug-port-no>/<debug-session-id>``
    * Attach your debugger to ``<debug-port-no>`` on ``localhost`` 
@@ -85,9 +84,19 @@ new NodejsFunction(
 
 •	If you want to enable reloading with new code changes pass ``-r``. You can apply your changes to AWS Lambda function live without need to deploy it.
 	
-``merloc -b wss://szmglosakb.execute-api.eu-central-1.amazonaws.com/dev -i sam-local -r``
+``merloc -b <YOUR_BROKER_URL> -i sam-local -r``
 
 If you change the code you should see the message ``Reloading…``, invoke your lambda function again and you should see execution with your changes. 
+
+#### Note for debugging
+
+When you run merloc in debug mode you will be able to debug transpiled code (javascript) that is not always a good solution. If you want to debug your source code (typescript)
+source maps can be good solution. Source maps is a file that maps transpiled code back to the original source. You can enable it with the following:
+- add enviroment variable to you lambda function ``"NODE_OPTIONS: "--enable-source-maps"``
+- add ``sourceMap: true`` in ``tsconfig.json`` file
+
+This works only for Node.js v12+
+
 
 ### AWS CDK
 
@@ -123,6 +132,7 @@ In this case invoker must be defined (``-i sam-local``)
 Configuration:
 
 ``--sam-init <cmd>`` - command to be run initially once, default value is ``sam build``
+
 instead of sam build, you would like to do the following
 * compile your local changes (``npm run build``)
 * synthesize your stack (``cdk synth``)
@@ -143,4 +153,4 @@ lead to infinite reload. Because of that all .ts files can be watched except .d.
 
 So, the whole command should look like 
 
-`` merloc -b wss://szmglosakb.execute-api.eu-central-1.amazonaws.com/dev -i sam-local --sam-init 'npm run build && cdk synth && sam build -t cdk.out/Stack.template.json' --sam-reload 'npm run build && cdk synth && sam build -t cdk.out/Stack.template.json' -d -r -w '**/**/*.ts' '!**/**/*.d.ts'``
+`` merloc -b ${brokerUrl} -i sam-local --sam-init 'npm run build && cdk synth && sam build -t cdk.out/${stackName}.json' --sam-reload 'npm run build && cdk synth && sam build -t cdk.out/${stackName}.template.json' -d -r -w '**/**/*.ts' '!**/**/*.d.ts'``
